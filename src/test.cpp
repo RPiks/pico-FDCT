@@ -54,12 +54,15 @@
 //  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 //  THE SOFTWARE.
 ///////////////////////////////////////////////////////////////////////////////
+#define DEBUG
+
 #include <string.h>
 #include <stdio.h>
-#include "pico/stdlib.h"
-//#include <stdlib.h>
 
-#define DEBUG
+#include <climits>
+#include <utility>
+
+#include "pico/stdlib.h"
 
 #include <defines.h>
 #include <init.h>
@@ -78,55 +81,72 @@ int main()
     dbg::StampPrintf("PicoDCT module init...");
     sigproc::PicoDCT pdct;
     
-    const int n2(10);
+    const int n2(12);
     const int len(1 << n2);
 
     dbg::StampPrintf("OK\nTesting forward + inverse conversion accuracy...\n");
 
     int32_t pvec_signal[len];
     int32_t pvec_temp[len];
+    int32_t pvec_fdct[len];
     for(int i(0); i < len; ++i)
     {
-        pvec_signal[i] = (int32_t)(0.5 + 500. * sin(2. * M_PI / 117. * (double)i));
+        pvec_signal[i] = (int32_t)(0.5 + 1024. * sin(2. * M_PI / 11.f * (double)i));
+        pvec_signal[i]+= (int32_t)(0.5 + 1024. * sin(2. * M_PI / 133.f * (double)i));
     }
 
     uint32_t uinoise(0xCAFEC0DE);
     for(;;)
     {
+        std::pair<int32_t, int32_t> pr_minmax = { INT_MAX, INT_MIN };
         for(int i(0); i < len; ++i)
         {
-            // Construct an additive mix of initial harmonic signal & noise.
+            // Construct an additive mix of initial signal & pseudo-random noise.
             utl::PRN32(&uinoise);
-            int32_t val = pvec_signal[i] + (int32_t)(uinoise % 500u) - 250u;
-            pdct.SetBuf()[i] = val;
-            pvec_temp[i] = val;
+            pdct.SetBuf()[i] = pvec_temp[i] = pvec_signal[i] + (int32_t)(uinoise % 1024u) - 512u;
+            pr_minmax.first = min(pr_minmax.first, pdct.GetBuf()[i]);
+            pr_minmax.second = max(pr_minmax.second, pdct.GetBuf()[i]);
         }
 
         uint64_t tm_start = utl::GetUptime64();
         pdct.FwdFDCT(n2);
         uint64_t tm_finish = utl::GetUptime64();
+        const int32_t ifwdcdt = tm_finish - tm_start;
 
-        dbg::StampPrintf("Forward DCT conversion time: %ld us", (int32_t)(tm_finish - tm_start));
-
+        // Apply scale to output in order to normalize result.
         for(int i(0); i < len; ++i)
         {
-            //printf("%ld;", pdct.GetBuf()[i]);
+            pvec_fdct[i] = pdct.SetBuf()[i];
             pdct.SetBuf()[i] >>= 3;
         }
-        //printf("\n");
 
         tm_start = utl::GetUptime64();
         pdct.InvFDCT(n2);
         tm_finish = utl::GetUptime64();
 
+        float f_acc2(0.f);
         for(int i(0); i < len; ++i)
         {
-            int32_t diff = (pdct.GetBuf()[i] >> 6) - pvec_temp[i];
-            printf("%ld;", diff);
+            const int32_t scl_val = (pdct.GetBuf()[i] + (1<<5)) >> 6;
+            const int32_t diff = scl_val - pvec_temp[i];
+            f_acc2 += SQR(diff);
+            printf("%ld;%ld;%ld;%ld\n", abs(pvec_fdct[i]), pvec_temp[i], scl_val, diff);
         }
 
-        dbg::StampPrintf("Inverse DCT conversion time: %ld us", (int32_t)(tm_finish - tm_start));
+        // Standard deviation of full cycle conversion error.
+        f_acc2 = sqrt(f_acc2 / (float)len);
+        
+        // Peak-to-peak range of the input signal.
+        const int32_t dpkpk = pr_minmax.second - pr_minmax.first;
+        
+        // Calculate an error in dB relative to full scale signal range.
+        // Edit this formula if you do prefer other method of quality assessment.
+        const float errdb = 20.f * std::log10(f_acc2 / (float)dpkpk);
 
-        sleep_ms(100);
+        dbg::StampPrintf("Forward DCT-%ld conversion time: %ld micros.", len, ifwdcdt);
+        dbg::StampPrintf("Inverse DCT-%ld conversion time: %ld micros.", len, (int32_t)(tm_finish - tm_start));
+        dbg::StampPrintf("Forward -> inverse transform error stats: Vpk-pk: %ld, Std.dev:%f, SNR:%.1f dBFS", dpkpk, f_acc2, errdb);
+
+        sleep_ms(3000);
     }
 }

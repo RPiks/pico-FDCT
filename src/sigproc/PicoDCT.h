@@ -75,6 +75,8 @@
 #define ASSERT_(x) assert(x)
 #endif
 
+#define SIN_PI2_BINS 4096L  // Number of bins of 1/sin(x) look-up table.
+
 namespace sigproc
 {
 
@@ -267,7 +269,7 @@ public:
             x = 25735L - x;
         }
 
-        const int index = x * 1025L / 12868L;
+        const int index = x * (SIN_PI2_BINS) / 12868L;
 
         return((int32_t)(sign * _sin1exp[index]));
     }
@@ -284,12 +286,12 @@ private:
         ASSERT_(_ptbuf);
 
         // Calculate values & fill array of 1/sin(x).
-        _sin1exp = (int32_t *)malloc(1025 * sizeof(int32_t));
+        _sin1exp = (int32_t *)malloc((SIN_PI2_BINS + 1) * sizeof(int32_t));
         ASSERT_(_sin1exp);
 
-        for(int i(0); i < 1025; ++i)
+        for(int i(0); i < (SIN_PI2_BINS + 1); ++i)
         {
-            const double dangle = .5 * M_PI * (double)i / 1024.;
+            const double dangle = .5 * M_PI * (double)i / (double)(SIN_PI2_BINS);
             const double dnom = (double)((1 << 12) - 1);
             const double ddenom = sin(dangle);
 
