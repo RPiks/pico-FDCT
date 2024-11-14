@@ -81,7 +81,7 @@ int main()
     dbg::StampPrintf("PicoDCT module init...");
     sigproc::PicoDCT pdct;
     
-    const int n2(12);
+    const int n2(10);
     const int len(1 << n2);
 
     dbg::StampPrintf("OK\nTesting forward + inverse conversion accuracy...\n");
@@ -91,8 +91,8 @@ int main()
     int32_t pvec_fdct[len];
     for(int i(0); i < len; ++i)
     {
-        pvec_signal[i] = (int32_t)(0.5 + 1024. * sin(2. * M_PI / 11.f * (double)i));
-        pvec_signal[i]+= (int32_t)(0.5 + 1024. * sin(2. * M_PI / 133.f * (double)i));
+        pvec_signal[i] = (int32_t)(0.5 + 512. * sin(2. * M_PI / 11.f * (double)i));
+        pvec_signal[i]+= (int32_t)(0.5 + 512. * sin(2. * M_PI / 133.f * (double)i));
     }
 
     uint32_t uinoise(0xCAFEC0DE);
@@ -103,8 +103,8 @@ int main()
         {
             // Construct an additive mix of initial signal & pseudo-random noise.
             utl::PRN32(&uinoise);
-            pdct.SetBuf()[i] = pvec_temp[i] = pvec_signal[i] + (int32_t)(uinoise % 1024u) - 512u;
-            pr_minmax.first = min(pr_minmax.first, pdct.GetBuf()[i]);
+            pdct.SetBuf()[i] = pvec_temp[i] = pvec_signal[i] + (int32_t)(uinoise % 1024U) - 512L;
+            pr_minmax.first  = min(pr_minmax.first, pdct.GetBuf()[i]);
             pr_minmax.second = max(pr_minmax.second, pdct.GetBuf()[i]);
         }
 
@@ -145,7 +145,7 @@ int main()
 
         dbg::StampPrintf("Forward DCT-%ld conversion time: %ld micros.", len, ifwdcdt);
         dbg::StampPrintf("Inverse DCT-%ld conversion time: %ld micros.", len, (int32_t)(tm_finish - tm_start));
-        dbg::StampPrintf("Forward -> inverse transform error stats: Vpk-pk: %ld, Std.dev:%f, SNR:%.1f dBFS", dpkpk, f_acc2, errdb);
+        dbg::StampPrintf("Forward -> inverse transform error stats: Vpk-pk: %ld, Error.Std.dev:%f, SNR:%.1f dBFS", dpkpk, f_acc2, errdb);
 
         sleep_ms(3000);
     }
